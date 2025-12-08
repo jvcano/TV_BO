@@ -15,11 +15,11 @@ from datetime import datetime
 # Configuration
 # EDIT THIS SECTION WITH YOUR CHANNELS
 CHANNELS = {
-    "Unitel bo": "https://www.dailymotion.com/video/x9n2qyk",
-    "RedUno  bo": "https://www.dailymotion.com/video/x7654321"
+    "Unitel bo": "https://unitel.bo/television/vivo",
+    "RedUno  bo": "https://www.dailymotion.com/video/x9n2qyk"
 }
 
-M3U_FILE = "playlist.m3u"  # Path to your M3U file
+M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
