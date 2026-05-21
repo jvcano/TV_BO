@@ -1,26 +1,54 @@
 #!/usr/bin/env python3
 """
-Dailymotion M3U8 Extractor & M3U Playlist Updater
-Extracts streaming URLs from Dailymotion videos and updates M3U playlist files
+M3U8 Extractor & M3U Playlist Updater
+Extracts streaming URLs from various sources and updates M3U playlist files
 
 Usage:
     python3 update_playlist.py
 """
 
+import argparse
+import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 from datetime import datetime
 
 # Configuration
-# EDIT THIS SECTION WITH YOUR CHANNELS
-CHANNELS = {
-    "Unitel bo": "https://unitel.bo/television/vivo",
-    "RedUno  bo": "https://www.dailymotion.com/video/x9n2qyk"
-}
+# extractor: "unitel" = scrape mdstrm iframe, "dailymotion" = yt-dlp
+CHANNELS = [
+    {"name": "Unitel bo",  "url": "https://unitel.bo/television/vivo",         "extractor": "unitel"},
+    {"name": "RedUno  bo", "url": "https://www.dailymotion.com/video/x9n2qyk", "extractor": "dailymotion"},
+]
 
 M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
+
+
+class UnitelExtractor:
+    """Extract stream URL from Unitel Bolivia website iframe"""
+
+    @staticmethod
+    def extract_stream_url(page_url):
+        try:
+            req = urllib.request.Request(
+                page_url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+
+            match = re.search(r'<iframe[^>]+src="(https://mdstrm\.com/live-stream/[^"?]+)', html)
+            if match:
+                return match.group(1)
+
+            print("  ✗ No mdstrm.com iframe found on page")
+            return None
+
+        except Exception as e:
+            print(f"  ✗ Error: {e}")
+            return None
 
 
 class DailymotionExtractor:
@@ -155,56 +183,71 @@ class M3UUpdater:
         return False
 
 
+def extract_url(channel):
+    if channel["extractor"] == "unitel":
+        return UnitelExtractor.extract_stream_url(channel["url"])
+    elif channel["extractor"] == "dailymotion":
+        return DailymotionExtractor.extract_m3u8_url(channel["url"])
+    else:
+        print(f"  ✗ Unknown extractor: {channel['extractor']}")
+        return None
+
+
 def main():
-    """Main execution function"""
-    
+    parser = argparse.ArgumentParser(description="M3U8 Extractor & Playlist Updater")
+    parser.add_argument("--check", action="store_true",
+                        help="Extract and print URLs without updating the M3U file")
+    args = parser.parse_args()
+
     print("=" * 60)
-    print("Dailymotion M3U8 Extractor & Playlist Updater")
+    print("M3U8 Extractor & Playlist Updater")
+    if args.check:
+        print("  MODE: check only (no file will be written)")
     print("=" * 60)
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-    
-    # Check if M3U file exists
-    if not Path(M3U_FILE).exists():
+
+    if not args.check and not Path(M3U_FILE).exists():
         print(f"Error: M3U file not found: {M3U_FILE}")
-        print("Please create the M3U file or update M3U_FILE path in script")
         return False
-    
+
     print(f"M3U File: {M3U_FILE}")
     print(f"Channels: {len(CHANNELS)}\n")
-    
-    # Extract M3U8 URLs for each channel
-    print("Extracting M3U8 URLs...")
+
+    print("Extracting URLs...")
     print("-" * 60)
-    
+
     channel_updates = {}
     success_count = 0
-    
-    for channel_name, dailymotion_url in CHANNELS.items():
-        print(f"\n{channel_name}")
-        print(f"  URL: {dailymotion_url}")
+
+    for channel in CHANNELS:
+        name = channel["name"]
+        print(f"\n{name}  [{channel['extractor']}]")
+        print(f"  Source: {channel['url']}")
         print(f"  Extracting...", end=" ", flush=True)
-        
-        m3u8_url = DailymotionExtractor.extract_m3u8_url(dailymotion_url)
-        
-        if m3u8_url:
+
+        url = extract_url(channel)
+
+        if url:
             print("✓")
-            print(f"  M3U8: {m3u8_url[:80]}..." if len(m3u8_url) > 80 else f"  M3U8: {m3u8_url}")
-            channel_updates[channel_name] = m3u8_url
+            print(f"  Stream: {url}")
+            channel_updates[name] = url
             success_count += 1
         else:
             print("✗")
-    
+
     print("\n" + "-" * 60)
     print(f"Extracted: {success_count}/{len(CHANNELS)} channels\n")
-    
-    # Update M3U file if we got any URLs
+
+    if args.check:
+        print("Check complete. Run without --check to update the M3U file.")
+        return success_count > 0
+
     if channel_updates:
         print("Updating M3U playlist file...")
         if M3UUpdater.update_m3u_file(M3U_FILE, channel_updates):
             print(f"✓ Successfully updated {M3U_FILE}")
-            print(f"\nUpdated channels:")
-            for channel_name in channel_updates.keys():
-                print(f"  • {channel_name}")
+            for name in channel_updates:
+                print(f"  • {name}")
             return True
         else:
             print(f"✗ Failed to update {M3U_FILE}")
