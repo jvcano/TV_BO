@@ -54,52 +54,77 @@ M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
+UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
+
 class UnitelExtractor:
-    """Extract HLS stream URL from Unitel Bolivia website.
-    Step 1: scrape the page for the mdstrm.com player URL.
-    Step 2: pass that player URL to yt-dlp to get the actual HLS manifest.
+    """Extract HLS stream URL from Unitel Bolivia.
+
+    Search order:
+      1. Fetch unitel.bo page  → find mdstrm stream ID → yt-dlp on player URL
+      2. If yt-dlp fails       → fetch the mdstrm #document and grep for .m3u8
     """
 
     @staticmethod
-    def extract_stream_url(page_url):
-        # Step 1 — scrape the mdstrm player URL out of the iframe
-        try:
-            req = urllib.request.Request(
-                page_url,
-                headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'}
-            )
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
-                html = response.read().decode('utf-8', errors='ignore')
-        except Exception as e:
-            print(f"  ✗ Could not fetch page: {e}")
-            return None
+    def _fetch(url):
+        req = urllib.request.Request(url, headers={'User-Agent': UA})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.read().decode('utf-8', errors='ignore')
 
-        match = re.search(r'<iframe[^>]+src="(https://mdstrm\.com/live-stream/[^"?]+)', html)
-        if not match:
-            print("  ✗ No mdstrm.com iframe found on page")
-            return None
-
-        player_url = match.group(1)
-
-        # Step 2 — extract the actual HLS manifest via yt-dlp
+    @staticmethod
+    def _ytdlp(url):
         try:
             result = subprocess.run(
-                ['yt-dlp', '-f', 'best', '-g', '--no-warnings', player_url],
+                ['yt-dlp', '-f', 'best', '-g', '--no-warnings', url],
                 capture_output=True, text=True, timeout=TIMEOUT
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-            print(f"  ✗ yt-dlp error: {result.stderr.strip()}")
-            return None
+            print(f"  ✗ yt-dlp: {result.stderr.strip()}")
         except subprocess.TimeoutExpired:
-            print(f"  ✗ Timeout extracting HLS from mdstrm")
-            return None
+            print("  ✗ yt-dlp timed out")
         except FileNotFoundError:
-            print("  ✗ yt-dlp not found — install with: pip install yt-dlp")
-            return None
+            print("  ✗ yt-dlp not found — pip install yt-dlp")
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            print(f"  ✗ yt-dlp error: {e}")
+        return None
+
+    @staticmethod
+    def extract_stream_url(page_url):
+        # ── Search 1: find mdstrm stream ID in the Unitel page ──────────────
+        try:
+            html = UnitelExtractor._fetch(page_url)
+        except Exception as e:
+            print(f"  ✗ Could not fetch page: {e}")
             return None
+
+        match = re.search(r'mdstrm\.com/live-stream/([a-zA-Z0-9]+)', html)
+        if not match:
+            print("  ✗ No mdstrm.com stream ID found on page")
+            return None
+
+        stream_id  = match.group(1)
+        player_url = f'https://mdstrm.com/live-stream/{stream_id}'
+        print(f"\n  Player: {player_url}")
+
+        # ── yt-dlp on the player URL ─────────────────────────────────────────
+        hls = UnitelExtractor._ytdlp(player_url)
+        if hls:
+            return hls
+
+        # ── Search 2: fetch the mdstrm #document and grep for .m3u8 ─────────
+        print("  Trying secondary search inside mdstrm player page...")
+        try:
+            player_html = UnitelExtractor._fetch(player_url)
+            m3u8 = re.search(r'(https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*)', player_html)
+            if m3u8:
+                print("  ✓ Found m3u8 in player page")
+                return m3u8.group(1)
+            print("  ✗ No .m3u8 found in player page")
+        except Exception as e:
+            print(f"  ✗ Could not fetch player page: {e}")
+
+        return None
 
 
 class DailymotionExtractor:
