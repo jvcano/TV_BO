@@ -90,13 +90,29 @@ class UnitelExtractor:
         return None
 
     @staticmethod
-    def extract_stream_url(page_url):
+    def extract_stream_url(page_url, debug=False):
         # ── Search 1: find mdstrm stream ID in the Unitel page ──────────────
         try:
             html = UnitelExtractor._fetch(page_url)
         except Exception as e:
             print(f"  ✗ Could not fetch page: {e}")
             return None
+
+        if debug:
+            print(f"\n  [DEBUG] Fetched {len(html)} chars from {page_url}")
+            print(f"  [DEBUG] Contains 'mdstrm': {'mdstrm' in html}")
+            print(f"  [DEBUG] Contains 'iframe': {'iframe' in html}")
+            print(f"  [DEBUG] Contains 'player': {'player' in html.lower()}")
+            # Show any line that contains mdstrm
+            hits = [l.strip() for l in html.splitlines() if 'mdstrm' in l]
+            if hits:
+                print(f"  [DEBUG] Lines with 'mdstrm':")
+                for h in hits[:5]:
+                    print(f"    {h[:200]}")
+            else:
+                print(f"  [DEBUG] No lines contain 'mdstrm' — page is likely JS-rendered")
+                print(f"  [DEBUG] First 500 chars of HTML:")
+                print(f"    {html[:500]}")
 
         match = re.search(r'mdstrm\.com/live-stream/([a-zA-Z0-9]+)', html)
         if not match:
@@ -240,9 +256,9 @@ class M3UUpdater:
         return M3UUpdater.write_m3u(m3u_file_path, CHANNELS, merged)
 
 
-def extract_url(channel):
+def extract_url(channel, debug=False):
     if channel["extractor"] == "unitel":
-        return UnitelExtractor.extract_stream_url(channel["url"])
+        return UnitelExtractor.extract_stream_url(channel["url"], debug=debug)
     elif channel["extractor"] == "dailymotion":
         return DailymotionExtractor.extract_m3u8_url(channel["url"])
     else:
@@ -254,6 +270,8 @@ def main():
     parser = argparse.ArgumentParser(description="M3U8 Extractor & Playlist Updater")
     parser.add_argument("--check", action="store_true",
                         help="Extract and print URLs without updating the M3U file")
+    parser.add_argument("--debug", action="store_true",
+                        help="Print raw HTML diagnostics for failed extractions")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -282,7 +300,7 @@ def main():
         print(f"  Source: {channel['url']}")
         print(f"  Extracting...", end=" ", flush=True)
 
-        url = extract_url(channel)
+        url = extract_url(channel, debug=args.debug)
 
         if url:
             print("✓")
