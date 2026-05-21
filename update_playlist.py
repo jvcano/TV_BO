@@ -32,6 +32,15 @@ CHANNELS = [
         "tvg_logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
         "group":    "TV BO",
     },
+
+    {
+        "name":     "RedUno bo - La Paz",
+        "url":      "https://www.dailymotion.com/video/xa0fwio",
+        "extractor":"dailymotion",
+        "tvg_id":   "RedUnoLaPaz.bo@Web",
+        "tvg_logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
+        "group":    "TV BO",
+    }
 ]
 
 M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
