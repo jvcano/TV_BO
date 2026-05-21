@@ -57,12 +57,17 @@ TIMEOUT = 30  # Seconds to wait for yt-dlp
 UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 
-class UnitelExtractor:
-    """Extract HLS stream URL from Unitel Bolivia.
+UNITEL_MDSTRM_ID = "692b7e7ac84183fcf9e3462d"  # permanent channel ID, only HLS URLs inside rotate
 
-    Search order:
-      1. Fetch unitel.bo page  → find mdstrm stream ID → yt-dlp on player URL
-      2. If yt-dlp fails       → fetch the mdstrm #document and grep for .m3u8
+
+class UnitelExtractor:
+    """Extract HLS stream URL for Unitel Bolivia.
+
+    The Unitel page is JS-rendered so urllib cannot see the iframe src.
+    Extraction order:
+      1. yt-dlp on the Unitel page directly  (handles JS-rendered pages)
+      2. yt-dlp on the known mdstrm player URL  (permanent channel ID fallback)
+      3. Fetch mdstrm #document and grep for .m3u8  (last resort)
     """
 
     @staticmethod
@@ -72,73 +77,59 @@ class UnitelExtractor:
             return r.read().decode('utf-8', errors='ignore')
 
     @staticmethod
-    def _ytdlp(url):
+    def _ytdlp(url, label):
+        print(f"  Trying yt-dlp on {label}...", end=" ", flush=True)
         try:
             result = subprocess.run(
                 ['yt-dlp', '-f', 'best', '-g', '--no-warnings', url],
                 capture_output=True, text=True, timeout=TIMEOUT
             )
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout.strip():
+                print("✓")
                 return result.stdout.strip()
-            print(f"  ✗ yt-dlp: {result.stderr.strip()}")
+            print(f"✗  ({result.stderr.strip()[:80]})")
         except subprocess.TimeoutExpired:
-            print("  ✗ yt-dlp timed out")
+            print("✗  (timed out)")
         except FileNotFoundError:
-            print("  ✗ yt-dlp not found — pip install yt-dlp")
+            print("✗  (yt-dlp not found — pip install yt-dlp)")
         except Exception as e:
-            print(f"  ✗ yt-dlp error: {e}")
+            print(f"✗  ({e})")
         return None
 
     @staticmethod
     def extract_stream_url(page_url, debug=False):
-        # ── Search 1: find mdstrm stream ID in the Unitel page ──────────────
-        try:
-            html = UnitelExtractor._fetch(page_url)
-        except Exception as e:
-            print(f"  ✗ Could not fetch page: {e}")
-            return None
+        player_url = f'https://mdstrm.com/live-stream/{UNITEL_MDSTRM_ID}'
 
         if debug:
-            print(f"\n  [DEBUG] Fetched {len(html)} chars from {page_url}")
-            print(f"  [DEBUG] Contains 'mdstrm': {'mdstrm' in html}")
-            print(f"  [DEBUG] Contains 'iframe': {'iframe' in html}")
-            print(f"  [DEBUG] Contains 'player': {'player' in html.lower()}")
-            # Show any line that contains mdstrm
-            hits = [l.strip() for l in html.splitlines() if 'mdstrm' in l]
-            if hits:
-                print(f"  [DEBUG] Lines with 'mdstrm':")
-                for h in hits[:5]:
-                    print(f"    {h[:200]}")
-            else:
-                print(f"  [DEBUG] No lines contain 'mdstrm' — page is likely JS-rendered")
-                print(f"  [DEBUG] First 500 chars of HTML:")
-                print(f"    {html[:500]}")
+            try:
+                html = UnitelExtractor._fetch(page_url)
+                print(f"\n  [DEBUG] Fetched {len(html)} chars")
+                print(f"  [DEBUG] 'mdstrm' in page: {'mdstrm' in html}")
+                print(f"  [DEBUG] First 300 chars: {html[:300]}")
+            except Exception as e:
+                print(f"  [DEBUG] Fetch failed: {e}")
 
-        match = re.search(r'mdstrm\.com/live-stream/([a-zA-Z0-9]+)', html)
-        if not match:
-            print("  ✗ No mdstrm.com stream ID found on page")
-            return None
-
-        stream_id  = match.group(1)
-        player_url = f'https://mdstrm.com/live-stream/{stream_id}'
-        print(f"\n  Player: {player_url}")
-
-        # ── yt-dlp on the player URL ─────────────────────────────────────────
-        hls = UnitelExtractor._ytdlp(player_url)
+        # ── Step 1: yt-dlp on the Unitel page (JS-aware extraction) ──────────
+        hls = UnitelExtractor._ytdlp(page_url, "Unitel page")
         if hls:
             return hls
 
-        # ── Search 2: fetch the mdstrm #document and grep for .m3u8 ─────────
-        print("  Trying secondary search inside mdstrm player page...")
+        # ── Step 2: yt-dlp on the known mdstrm player URL ────────────────────
+        hls = UnitelExtractor._ytdlp(player_url, "mdstrm player (fallback)")
+        if hls:
+            return hls
+
+        # ── Step 3: fetch mdstrm #document and grep for .m3u8 ────────────────
+        print("  Trying direct search in mdstrm player page...", end=" ", flush=True)
         try:
             player_html = UnitelExtractor._fetch(player_url)
             m3u8 = re.search(r'(https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*)', player_html)
             if m3u8:
-                print("  ✓ Found m3u8 in player page")
+                print("✓")
                 return m3u8.group(1)
-            print("  ✗ No .m3u8 found in player page")
+            print("✗  (no .m3u8 found)")
         except Exception as e:
-            print(f"  ✗ Could not fetch player page: {e}")
+            print(f"✗  ({e})")
 
         return None
 
