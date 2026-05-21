@@ -30,10 +30,24 @@ def git_push(filepath):
         return False
 
 # Configuration
-# extractor: "unitel" = scrape mdstrm iframe, "dailymotion" = yt-dlp
+# extractor: "unitel" = scrape mdstrm iframe + yt-dlp, "dailymotion" = yt-dlp
 CHANNELS = [
-    {"name": "Unitel bo",  "url": "https://unitel.bo/television/vivo",         "extractor": "unitel"},
-    {"name": "RedUno  bo", "url": "https://www.dailymotion.com/video/x9n2qyk", "extractor": "dailymotion"},
+    {
+        "name":     "Unitel bo",
+        "url":      "https://unitel.bo/television/vivo",
+        "extractor":"unitel",
+        "tvg_id":   "Unitel.bo@Web",
+        "tvg_logo": "https://cdn.theorg.com/0f6b491c-9b22-43e4-ae72-d0138aa10870_thumb.jpg",
+        "group":    "TV BO",
+    },
+    {
+        "name":     "RedUno  bo",
+        "url":      "https://www.dailymotion.com/video/x9n2qyk",
+        "extractor":"dailymotion",
+        "tvg_id":   "RedUno.bo@Web",
+        "tvg_logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
+        "group":    "TV BO",
+    },
 ]
 
 M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
@@ -41,25 +55,48 @@ TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
 class UnitelExtractor:
-    """Extract stream URL from Unitel Bolivia website iframe"""
+    """Extract HLS stream URL from Unitel Bolivia website.
+    Step 1: scrape the page for the mdstrm.com player URL.
+    Step 2: pass that player URL to yt-dlp to get the actual HLS manifest.
+    """
 
     @staticmethod
     def extract_stream_url(page_url):
+        # Step 1 — scrape the mdstrm player URL out of the iframe
         try:
             req = urllib.request.Request(
                 page_url,
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'}
             )
             with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
                 html = response.read().decode('utf-8', errors='ignore')
+        except Exception as e:
+            print(f"  ✗ Could not fetch page: {e}")
+            return None
 
-            match = re.search(r'<iframe[^>]+src="(https://mdstrm\.com/live-stream/[^"?]+)', html)
-            if match:
-                return match.group(1)
-
+        match = re.search(r'<iframe[^>]+src="(https://mdstrm\.com/live-stream/[^"?]+)', html)
+        if not match:
             print("  ✗ No mdstrm.com iframe found on page")
             return None
 
+        player_url = match.group(1)
+
+        # Step 2 — extract the actual HLS manifest via yt-dlp
+        try:
+            result = subprocess.run(
+                ['yt-dlp', '-f', 'best', '-g', '--no-warnings', player_url],
+                capture_output=True, text=True, timeout=TIMEOUT
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+            print(f"  ✗ yt-dlp error: {result.stderr.strip()}")
+            return None
+        except subprocess.TimeoutExpired:
+            print(f"  ✗ Timeout extracting HLS from mdstrm")
+            return None
+        except FileNotFoundError:
+            print("  ✗ yt-dlp not found — install with: pip install yt-dlp")
+            return None
         except Exception as e:
             print(f"  ✗ Error: {e}")
             return None
@@ -116,85 +153,65 @@ class DailymotionExtractor:
 
 
 class M3UUpdater:
-    """Update M3U playlist files with new URLs"""
-    
+    """Write and update M3U playlist files"""
+
     @staticmethod
-    def read_m3u(filepath):
-        """Read M3U file and return lines"""
+    def read_stream_urls(filepath):
+        """Read current stream URL for each channel name from an existing m3u file."""
+        urls = {}
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
-                return f.readlines()
-        except FileNotFoundError:
-            print(f"Error: M3U file not found: {filepath}")
-            return None
-        except Exception as e:
-            print(f"Error reading M3U file: {e}")
-            return None
-    
+                lines = [l.rstrip('\r\n') for l in f.readlines()]
+            for i, line in enumerate(lines):
+                if '#EXTINF' in line and ',' in line:
+                    name = line.split(',', 1)[1].strip()
+                    if i + 1 < len(lines):
+                        url = lines[i + 1].strip()
+                        if url and not url.startswith('#'):
+                            urls[name] = url
+        except Exception:
+            pass
+        return urls
+
     @staticmethod
-    def write_m3u(filepath, lines):
-        """Write updated lines to M3U file"""
+    def write_m3u(filepath, channels, url_map):
+        """
+        Write a clean M3U file from scratch following standard IPTV format:
+          #EXTM3U
+          [blank]
+          #EXTINF:-1 tvg-id="..." tvg-logo="..." group-title="...",Name
+          stream-url
+          [blank]
+          ...
+        """
         try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
+            with open(filepath, 'w', encoding='utf-8', newline='\n') as f:
+                f.write('#EXTM3U\n')
+                for ch in channels:
+                    url = url_map.get(ch['name'])
+                    if not url:
+                        continue
+                    f.write('\n')
+                    f.write(
+                        f'#EXTINF:-1 tvg-id="{ch["tvg_id"]}" '
+                        f'tvg-logo="{ch["tvg_logo"]}" '
+                        f'group-title="{ch["group"]}",{ch["name"]}\n'
+                    )
+                    f.write(f'{url}\n')
             return True
         except Exception as e:
             print(f"Error writing M3U file: {e}")
             return False
-    
+
     @staticmethod
     def update_m3u_file(m3u_file_path, channel_updates):
         """
-        Update M3U file with new URLs
-        
-        Args:
-            m3u_file_path (str): Path to M3U file
-            channel_updates (dict): Channel name -> new URL mapping
-            
-        Returns:
-            bool: True if update successful
+        Merge new URLs with existing ones and write a clean file.
+        Channels that failed extraction keep their previous URL.
         """
-        
-        # Read existing M3U file
-        lines = M3UUpdater.read_m3u(m3u_file_path)
-        if lines is None:
-            return False
-        
-        # Process lines
-        updated_lines = []
-        i = 0
-        
-        while i < len(lines):
-            line = lines[i]
-            
-            # Check if this is an EXTINF line (channel info)
-            if '#EXTINF' in line:
-                updated_lines.append(line)
-                
-                # Extract channel name from EXTINF line
-                # Format: #EXTINF:-1 tvg-logo="..." group-title="...", Channel Name
-                if ',' in line:
-                    channel_name = line.split(',', 1)[1].strip()
-                    
-                    # Check if this channel needs updating
-                    if channel_name in channel_updates:
-                        # Skip the old URL line
-                        if i + 1 < len(lines):
-                            i += 1
-                        
-                        # Add new URL
-                        new_url = channel_updates[channel_name]
-                        updated_lines.append(f"{new_url}\n")
-                        i += 1
-                        continue
-            
-            updated_lines.append(line)
-            i += 1
-        
-        # Write updated file
-        if M3UUpdater.write_m3u(m3u_file_path, updated_lines):
-            return True
-        return False
+        existing = M3UUpdater.read_stream_urls(m3u_file_path)
+        merged   = {**existing, **channel_updates}   # new URLs override old
+        return M3UUpdater.write_m3u(m3u_file_path, CHANNELS, merged)
 
 
 def extract_url(channel):

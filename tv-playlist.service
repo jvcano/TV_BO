@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=mimir
+User=root
 WorkingDirectory=/root/TV_BO
 ExecStart=/usr/bin/python3 /root/TV_BO/serve.py
 Restart=on-failure

@@ -40,17 +40,7 @@ def check_stream_url(url):
 
 def get_current_url(channel_name):
     """Return the current stream URL for a channel from the m3u file."""
-    lines = M3UUpdater.read_m3u(M3U_FILE)
-    if not lines:
-        return None
-    for i, line in enumerate(lines):
-        if "#EXTINF" in line and "," in line:
-            name = line.split(",", 1)[1].strip()
-            if name == channel_name and i + 1 < len(lines):
-                url = lines[i + 1].strip()
-                if url and not url.startswith("#"):
-                    return url
-    return None
+    return M3UUpdater.read_stream_urls(M3U_FILE).get(channel_name)
 
 
 def fetch_and_test(channel):
