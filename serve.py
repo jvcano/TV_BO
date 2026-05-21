@@ -25,5 +25,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         print(f"Serving {SERVE_DIR} on port {PORT}")
-        print(f"Playlist URL: http://<your-server-ip>:{PORT}/bo.m3u")
+        print(f"Playlist URL: http://<your-server-ip>pyt    :{PORT}/bo.m3u")
         httpd.serve_forever()
