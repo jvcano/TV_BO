@@ -8,26 +8,10 @@ Usage:
 """
 
 import argparse
-import re
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 from datetime import datetime
-
-
-def git_push(filepath):
-    """Commit and push the updated m3u file to GitHub."""
-    try:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        subprocess.run(["git", "add", filepath], check=True)
-        subprocess.run(["git", "commit", "-m", f"chore: update stream URLs [{ts}]"], check=True)
-        subprocess.run(["git", "push"], check=True)
-        print("✓ Pushed to GitHub")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"✗ Git push failed: {e}")
-        return False
 
 # Configuration
 # extractor: "unitel" = scrape mdstrm iframe + yt-dlp, "dailymotion" = yt-dlp
@@ -54,84 +38,22 @@ M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
-UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-
-
-UNITEL_MDSTRM_ID = "692b7e7ac84183fcf9e3462d"  # permanent channel ID, only HLS URLs inside rotate
+# Stable mdstrm player URL for Unitel — the stream ID and player ID are permanent.
+# Only the signed CDN URLs that yt-dlp would extract are short-lived; this URL is not.
+UNITEL_PLAYER_URL = "https://mdstrm.com/live-stream/692b7e7ac84183fcf9e3462d?jsapi=true&player=69132f19f5398246a0193ebe"
 
 
 class UnitelExtractor:
-    """Extract HLS stream URL for Unitel Bolivia.
+    """Returns the known stable mdstrm player URL for Unitel Bolivia.
 
-    The Unitel page is JS-rendered so urllib cannot see the iframe src.
-    Extraction order:
-      1. yt-dlp on the Unitel page directly  (handles JS-rendered pages)
-      2. yt-dlp on the known mdstrm player URL  (permanent channel ID fallback)
-      3. Fetch mdstrm #document and grep for .m3u8  (last resort)
+    The Unitel page is JS-rendered so the iframe src cannot be scraped.
+    The mdstrm player URL is permanent — only the signed CDN URLs that
+    yt-dlp extracts are short-lived and useless in an m3u playlist.
     """
 
     @staticmethod
-    def _fetch(url):
-        req = urllib.request.Request(url, headers={'User-Agent': UA})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.read().decode('utf-8', errors='ignore')
-
-    @staticmethod
-    def _ytdlp(url, label):
-        print(f"  Trying yt-dlp on {label}...", end=" ", flush=True)
-        try:
-            result = subprocess.run(
-                ['yt-dlp', '-f', 'best', '-g', '--no-warnings', url],
-                capture_output=True, text=True, timeout=TIMEOUT
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                print("✓")
-                return result.stdout.strip()
-            print(f"✗  ({result.stderr.strip()[:80]})")
-        except subprocess.TimeoutExpired:
-            print("✗  (timed out)")
-        except FileNotFoundError:
-            print("✗  (yt-dlp not found — pip install yt-dlp)")
-        except Exception as e:
-            print(f"✗  ({e})")
-        return None
-
-    @staticmethod
-    def extract_stream_url(page_url, debug=False):
-        player_url = f'https://mdstrm.com/live-stream/{UNITEL_MDSTRM_ID}'
-
-        if debug:
-            try:
-                html = UnitelExtractor._fetch(page_url)
-                print(f"\n  [DEBUG] Fetched {len(html)} chars")
-                print(f"  [DEBUG] 'mdstrm' in page: {'mdstrm' in html}")
-                print(f"  [DEBUG] First 300 chars: {html[:300]}")
-            except Exception as e:
-                print(f"  [DEBUG] Fetch failed: {e}")
-
-        # ── Step 1: yt-dlp on the Unitel page (JS-aware extraction) ──────────
-        hls = UnitelExtractor._ytdlp(page_url, "Unitel page")
-        if hls:
-            return hls
-
-        # ── Step 2: yt-dlp on the known mdstrm player URL ────────────────────
-        hls = UnitelExtractor._ytdlp(player_url, "mdstrm player (fallback)")
-        if hls:
-            return hls
-
-        # ── Step 3: fetch mdstrm #document and grep for .m3u8 ────────────────
-        print("  Trying direct search in mdstrm player page...", end=" ", flush=True)
-        try:
-            player_html = UnitelExtractor._fetch(player_url)
-            m3u8 = re.search(r'(https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*)', player_html)
-            if m3u8:
-                print("✓")
-                return m3u8.group(1)
-            print("✗  (no .m3u8 found)")
-        except Exception as e:
-            print(f"✗  ({e})")
-
-        return None
+    def extract_stream_url():
+        return UNITEL_PLAYER_URL
 
 
 class DailymotionExtractor:
@@ -247,9 +169,9 @@ class M3UUpdater:
         return M3UUpdater.write_m3u(m3u_file_path, CHANNELS, merged)
 
 
-def extract_url(channel, debug=False):
+def extract_url(channel):
     if channel["extractor"] == "unitel":
-        return UnitelExtractor.extract_stream_url(channel["url"], debug=debug)
+        return UnitelExtractor.extract_stream_url()
     elif channel["extractor"] == "dailymotion":
         return DailymotionExtractor.extract_m3u8_url(channel["url"])
     else:
@@ -261,8 +183,6 @@ def main():
     parser = argparse.ArgumentParser(description="M3U8 Extractor & Playlist Updater")
     parser.add_argument("--check", action="store_true",
                         help="Extract and print URLs without updating the M3U file")
-    parser.add_argument("--debug", action="store_true",
-                        help="Print raw HTML diagnostics for failed extractions")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -291,7 +211,7 @@ def main():
         print(f"  Source: {channel['url']}")
         print(f"  Extracting...", end=" ", flush=True)
 
-        url = extract_url(channel, debug=args.debug)
+        url = extract_url(channel)
 
         if url:
             print("✓")
