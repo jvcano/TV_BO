@@ -191,9 +191,10 @@ class M3UUpdater:
                     url = url_map.get(ch['name'])
                     if not url:
                         continue
-                    f.write('\n')
                     f.write(
-                        f'#EXTINF:-1 tvg-id="{ch["tvg_id"]}" '
+                        f'#EXTINF:-1 '
+                        f'tvg-id="{ch["tvg_id"]}" '
+                        f'tvg-name="{ch["name"]}" '
                         f'tvg-logo="{ch["tvg_logo"]}" '
                         f'group-title="{ch["group"]}",{ch["name"]}\n'
                     )
