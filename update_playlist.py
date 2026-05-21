@@ -15,6 +15,20 @@ import urllib.request
 from pathlib import Path
 from datetime import datetime
 
+
+def git_push(filepath):
+    """Commit and push the updated m3u file to GitHub."""
+    try:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        subprocess.run(["git", "add", filepath], check=True)
+        subprocess.run(["git", "commit", "-m", f"chore: update stream URLs [{ts}]"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print("✓ Pushed to GitHub")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Git push failed: {e}")
+        return False
+
 # Configuration
 # extractor: "unitel" = scrape mdstrm iframe, "dailymotion" = yt-dlp
 CHANNELS = [
@@ -248,6 +262,7 @@ def main():
             print(f"✓ Successfully updated {M3U_FILE}")
             for name in channel_updates:
                 print(f"  • {name}")
+            git_push(M3U_FILE)
             return True
         else:
             print(f"✗ Failed to update {M3U_FILE}")
