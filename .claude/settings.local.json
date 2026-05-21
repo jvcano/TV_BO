@@ -5,7 +5,10 @@
       "WebFetch(domain:en.f-player.ru)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:wiki.tvip.tv)",
-      "WebFetch(domain:streamingguide.org)"
+      "WebFetch(domain:streamingguide.org)",
+      "WebFetch(domain:streamtest.in)",
+      "WebFetch(domain:recstreams.com)",
+      "WebFetch(domain:paste.ulvis.net)"
     ]
   }
 }

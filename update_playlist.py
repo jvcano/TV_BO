@@ -38,38 +38,22 @@ M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
-# Permanent mdstrm player page for Unitel. The stream ID never changes.
-# yt-dlp extracts the actual HLS .m3u8 CDN URL from this page.
-# The CDN URL contains signed tokens that expire, so check_links.py refreshes it.
-UNITEL_PLAYER_URL = "https://mdstrm.com/live-stream/692b7e7ac84183fcf9e3462d"
+# Direct permanent HLS URL for Unitel — same pattern used by all mdstrm-hosted
+# Latin American channels. No signing, no tokens, no expiry.
+# Pattern confirmed: mdstrm.com/live-stream-playlist/{stream_id}.m3u8
+UNITEL_STREAM_URL = "https://mdstrm.com/live-stream-playlist/692b7e7ac84183fcf9e3462d.m3u8"
 
 
 class UnitelExtractor:
-    """Extracts the HLS .m3u8 stream URL for Unitel Bolivia via yt-dlp.
+    """Returns the permanent HLS stream URL for Unitel Bolivia.
 
-    The Unitel page is JS-rendered so its iframe src cannot be scraped directly.
-    Instead, yt-dlp is run against the known permanent mdstrm player page,
-    which returns the signed CDN .m3u8 URL that VLC/TiviMate can actually play.
-    The CDN tokens expire (overnight rotation), so check_links.py re-runs this.
+    mdstrm.com exposes a stable /live-stream-playlist/{id}.m3u8 endpoint
+    for all its hosted channels — no signed tokens, no expiry, no yt-dlp needed.
     """
 
     @staticmethod
     def extract_stream_url():
-        try:
-            result = subprocess.run(
-                ['yt-dlp', '-f', 'best', '-g', '--no-warnings', UNITEL_PLAYER_URL],
-                capture_output=True, text=True, timeout=TIMEOUT
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
-            print(f"  ✗ yt-dlp: {result.stderr.strip()[:120]}")
-        except subprocess.TimeoutExpired:
-            print("  ✗ yt-dlp timed out")
-        except FileNotFoundError:
-            print("  ✗ yt-dlp not found — pip install yt-dlp")
-        except Exception as e:
-            print(f"  ✗ {e}")
-        return None
+        return UNITEL_STREAM_URL
 
 
 class DailymotionExtractor:
