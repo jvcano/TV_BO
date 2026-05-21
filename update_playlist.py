@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 """
 M3U8 Extractor & M3U Playlist Updater
 Extracts streaming URLs from various sources and updates M3U playlist files
