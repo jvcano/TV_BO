@@ -16,7 +16,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
-from update_playlist import CHANNELS, M3U_FILE, M3UUpdater, extract_url, git_push
+from update_playlist import CHANNELS, M3U_FILE, M3UUpdater, extract_url
 
 MAX_RETRIES = 3
 CHECK_TIMEOUT = 10  # seconds for each HTTP check
@@ -130,7 +130,6 @@ def main():
         print(f"✓ M3U file updated:")
         for name in channel_updates:
             print(f"  • {name}")
-        git_push(M3U_FILE)
         return True
     else:
         print("✗ Failed to write M3U file")

@@ -262,7 +262,6 @@ def main():
             print(f"✓ Successfully updated {M3U_FILE}")
             for name in channel_updates:
                 print(f"  • {name}")
-            git_push(M3U_FILE)
             return True
         else:
             print(f"✗ Failed to update {M3U_FILE}")

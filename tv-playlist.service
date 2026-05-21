@@ -1,0 +1,14 @@
+[Unit]
+Description=TV Playlist HTTP Server
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/TV_BO
+ExecStart=/usr/bin/python3 /path/to/TV_BO/serve.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
