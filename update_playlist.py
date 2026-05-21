@@ -38,22 +38,38 @@ M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
-# Stable mdstrm player URL for Unitel — the stream ID and player ID are permanent.
-# Only the signed CDN URLs that yt-dlp would extract are short-lived; this URL is not.
-UNITEL_PLAYER_URL = "https://mdstrm.com/live-stream/692b7e7ac84183fcf9e3462d?jsapi=true&player=69132f19f5398246a0193ebe"
+# Permanent mdstrm player page for Unitel. The stream ID never changes.
+# yt-dlp extracts the actual HLS .m3u8 CDN URL from this page.
+# The CDN URL contains signed tokens that expire, so check_links.py refreshes it.
+UNITEL_PLAYER_URL = "https://mdstrm.com/live-stream/692b7e7ac84183fcf9e3462d"
 
 
 class UnitelExtractor:
-    """Returns the known stable mdstrm player URL for Unitel Bolivia.
+    """Extracts the HLS .m3u8 stream URL for Unitel Bolivia via yt-dlp.
 
-    The Unitel page is JS-rendered so the iframe src cannot be scraped.
-    The mdstrm player URL is permanent — only the signed CDN URLs that
-    yt-dlp extracts are short-lived and useless in an m3u playlist.
+    The Unitel page is JS-rendered so its iframe src cannot be scraped directly.
+    Instead, yt-dlp is run against the known permanent mdstrm player page,
+    which returns the signed CDN .m3u8 URL that VLC/TiviMate can actually play.
+    The CDN tokens expire (overnight rotation), so check_links.py re-runs this.
     """
 
     @staticmethod
     def extract_stream_url():
-        return UNITEL_PLAYER_URL
+        try:
+            result = subprocess.run(
+                ['yt-dlp', '-f', 'best', '-g', '--no-warnings', UNITEL_PLAYER_URL],
+                capture_output=True, text=True, timeout=TIMEOUT
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+            print(f"  ✗ yt-dlp: {result.stderr.strip()[:120]}")
+        except subprocess.TimeoutExpired:
+            print("  ✗ yt-dlp timed out")
+        except FileNotFoundError:
+            print("  ✗ yt-dlp not found — pip install yt-dlp")
+        except Exception as e:
+            print(f"  ✗ {e}")
+        return None
 
 
 class DailymotionExtractor:
