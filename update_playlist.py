@@ -228,8 +228,9 @@ def main():
 
     for channel in CHANNELS:
         name = channel["name"]
+        source = channel.get('url') or channel.get('stream_url', '')
         print(f"\n{name}  [{channel['extractor']}]")
-        print(f"  Source: {channel['url']}")
+        print(f"  Source: {source}")
         print(f"  Extracting...", end=" ", flush=True)
 
         url = extract_url(channel)
