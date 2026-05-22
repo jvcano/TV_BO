@@ -14,55 +14,67 @@ from pathlib import Path
 from datetime import datetime
 
 # Configuration
-# extractor: "unitel" = scrape mdstrm iframe + yt-dlp, "dailymotion" = yt-dlp
+# extractor "unitel"     → permanent mdstrm HLS URL from stream_url field
+# extractor "dailymotion"→ yt-dlp extracts a fresh CDN .m3u8 each run
+MDSTRM = "https://mdstrm.com/live-stream-playlist/{}.m3u8"
+
 CHANNELS = [
     {
-        "name":     "Unitel bo",
-        "url":      "https://unitel.bo/television/vivo",
-        "extractor":"unitel",
-        "tvg_id":   "Unitel.bo@Web",
-        "tvg_logo": "https://cdn.theorg.com/0f6b491c-9b22-43e4-ae72-d0138aa10870_thumb.jpg",
-        "group":    "TV BO",
+        "name":       "Unitel bo - Santa Cruz",
+        "extractor":  "unitel",
+        "stream_url": MDSTRM.format("692b7e7ac84183fcf9e3462d"),
+        "tvg_id":     "UnitelSCZ.bo@Web",
+        "tvg_logo":   "https://cdn.theorg.com/0f6b491c-9b22-43e4-ae72-d0138aa10870_thumb.jpg",
+        "group":      "Unitel BO",
     },
     {
-        "name":     "RedUno  bo",
-        "url":      "https://www.dailymotion.com/video/x9n2qyk",
-        "extractor":"dailymotion",
-        "tvg_id":   "RedUno.bo@Web",
-        "tvg_logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
-        "group":    "TV BO",
+        "name":       "Unitel bo - La Paz",
+        "extractor":  "unitel",
+        "stream_url": MDSTRM.format("6928b14aaa768aad947bf65d"),
+        "tvg_id":     "UnitelLPZ.bo@Web",
+        "tvg_logo":   "https://cdn.theorg.com/0f6b491c-9b22-43e4-ae72-d0138aa10870_thumb.jpg",
+        "group":      "Unitel BO",
     },
-
     {
-        "name":     "RedUno bo - La Paz",
-        "url":      "https://www.dailymotion.com/video/xa0fwio",
-        "extractor":"dailymotion",
-        "tvg_id":   "RedUnoLaPaz.bo@Web",
-        "tvg_logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
-        "group":    "TV BO",
-    }
+        "name":       "Unitel bo - Cochabamba",
+        "extractor":  "unitel",
+        "stream_url": MDSTRM.format("691f2aeb5ac95d286c49af8d"),
+        "tvg_id":     "UnitelCBBA.bo@Web",
+        "tvg_logo":   "https://cdn.theorg.com/0f6b491c-9b22-43e4-ae72-d0138aa10870_thumb.jpg",
+        "group":      "Unitel BO",
+    },
+    {
+        "name":       "RedUno  bo",
+        "url":        "https://www.dailymotion.com/video/x9n2qyk",
+        "extractor":  "dailymotion",
+        "tvg_id":     "RedUno.bo@Web",
+        "tvg_logo":   "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
+        "group":      "TV BO",
+    },
+    {
+        "name":       "RedUno bo - La Paz",
+        "url":        "https://www.dailymotion.com/video/xa0fwio",
+        "extractor":  "dailymotion",
+        "tvg_id":     "RedUnoLaPaz.bo@Web",
+        "tvg_logo":   "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
+        "group":      "TV BO",
+    },
 ]
 
 M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
-# Direct permanent HLS URL for Unitel — same pattern used by all mdstrm-hosted
-# Latin American channels. No signing, no tokens, no expiry.
-# Pattern confirmed: mdstrm.com/live-stream-playlist/{stream_id}.m3u8
-UNITEL_STREAM_URL = "https://mdstrm.com/live-stream-playlist/692b7e7ac84183fcf9e3462d.m3u8"
-
-
 class UnitelExtractor:
-    """Returns the permanent HLS stream URL for Unitel Bolivia.
+    """Returns the permanent HLS URL stored in the channel config.
 
-    mdstrm.com exposes a stable /live-stream-playlist/{id}.m3u8 endpoint
-    for all its hosted channels — no signed tokens, no expiry, no yt-dlp needed.
+    mdstrm.com exposes /live-stream-playlist/{id}.m3u8 for all hosted channels.
+    No signed tokens, no expiry, no yt-dlp needed — URL lives in CHANNELS.
     """
 
     @staticmethod
-    def extract_stream_url():
-        return UNITEL_STREAM_URL
+    def extract_stream_url(channel):
+        return channel["stream_url"]
 
 
 class DailymotionExtractor:
@@ -180,7 +192,7 @@ class M3UUpdater:
 
 def extract_url(channel):
     if channel["extractor"] == "unitel":
-        return UnitelExtractor.extract_stream_url()
+        return UnitelExtractor.extract_stream_url(channel)
     elif channel["extractor"] == "dailymotion":
         return DailymotionExtractor.extract_m3u8_url(channel["url"])
     else:
