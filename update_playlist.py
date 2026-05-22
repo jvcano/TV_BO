@@ -59,6 +59,14 @@ CHANNELS = [
         "tvg_logo":   "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Uno_logo.svg/200px-Uno_logo.svg.png",
         "group":      "TV BO",
     },
+    {
+        "name":       "Bolivia tv- La Paz",
+        "url":        "https://www.dailymotion.com/video/x9nzqpo",
+        "extractor":  "dailymotion",
+        "tvg_id":     "BoliviaTV.bo@Web",
+        "tvg_logo":   "https://www.boliviatv.bo/principal/images/logos/btv-nuevo.png",
+        "group":      "TV BO",
+    },
 ]
 
 M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
