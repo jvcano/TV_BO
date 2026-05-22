@@ -8,14 +8,17 @@ Usage:
 """
 
 import argparse
+import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 from datetime import datetime
 
 # Configuration
 # extractor "unitel"     → permanent mdstrm HLS URL from stream_url field
 # extractor "dailymotion"→ yt-dlp extracts a fresh CDN .m3u8 each run
+# extractor "boliviatv"  → fetches page HTML, finds current Dailymotion video ID, then yt-dlp
 MDSTRM = "https://mdstrm.com/live-stream-playlist/{}.m3u8"
 
 CHANNELS = [
@@ -61,8 +64,8 @@ CHANNELS = [
     },
     {
         "name":       "Bolivia tv- La Paz",
-        "url":        "https://www.dailymotion.com/video/x9nzqpo",
-        "extractor":  "dailymotion",
+        "url":        "https://www.boliviatv.bo/principal/vivo71.php",
+        "extractor":  "boliviatv",
         "tvg_id":     "BoliviaTV.bo@Web",
         "tvg_logo":   "https://www.boliviatv.bo/principal/images/logos/btv-nuevo.png",
         "group":      "TV BO",
@@ -135,6 +138,48 @@ class DailymotionExtractor:
             return None
 
 
+class BoliviaTVExtractor:
+    """Discover the current Dailymotion video ID from the Bolivia TV live page.
+
+    Bolivia TV periodically rotates the Dailymotion video used for their live stream.
+    This fetches the page HTML, finds whichever video ID is currently embedded,
+    then hands it to DailymotionExtractor to get the CDN .m3u8.
+    """
+
+    # Patterns ordered from most specific to least specific
+    _PATTERNS = [
+        r'dailymotion\.com/(?:video|embed/video)/([a-zA-Z0-9]+)',
+        r'geo\.dailymotion\.com/[^"\']*[?&]video=([a-zA-Z0-9]+)',
+        r'"video"\s*:\s*"([a-zA-Z0-9]{5,})"',
+        r'videoId[^"\']{0,5}["\']([a-zA-Z0-9]{5,})["\']',
+    ]
+
+    @staticmethod
+    def extract_stream_url(channel):
+        page_url = channel["url"]
+        try:
+            req = urllib.request.Request(
+                page_url,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            print(f"  ✗ Failed to fetch page: {e}")
+            return None
+
+        for pattern in BoliviaTVExtractor._PATTERNS:
+            match = re.search(pattern, html)
+            if match:
+                video_id = match.group(1)
+                dm_url = f"https://www.dailymotion.com/video/{video_id}"
+                print(f"  Found video ID: {video_id}")
+                return DailymotionExtractor.extract_m3u8_url(dm_url)
+
+        print("  ✗ No Dailymotion video ID found in page (page may be JS-rendered)")
+        return None
+
+
 class M3UUpdater:
     """Write and update M3U playlist files"""
 
@@ -203,6 +248,8 @@ def extract_url(channel):
         return UnitelExtractor.extract_stream_url(channel)
     elif channel["extractor"] == "dailymotion":
         return DailymotionExtractor.extract_m3u8_url(channel["url"])
+    elif channel["extractor"] == "boliviatv":
+        return BoliviaTVExtractor.extract_stream_url(channel)
     else:
         print(f"  ✗ Unknown extractor: {channel['extractor']}")
         return None
