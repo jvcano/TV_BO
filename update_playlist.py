@@ -120,7 +120,8 @@ class DailymotionExtractor:
             )
             
             if result.returncode == 0:
-                m3u8_url = result.stdout.strip()
+                # yt-dlp can return multiple lines; first line is the stream URL
+                m3u8_url = result.stdout.strip().splitlines()[0] if result.stdout.strip() else None
                 return m3u8_url
             else:
                 print(f"  ✗ Error: {result.stderr.strip()}")

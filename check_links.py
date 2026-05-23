@@ -24,7 +24,7 @@ RETRY_WAIT = 10     # seconds between retry attempts
 
 
 def check_stream_url(url):
-    """Returns True if URL responds with data (HTTP 200 + non-empty body)."""
+    """Returns True if URL returns a valid HLS manifest (HTTP 200 + #EXTM3U or #EXT-X- marker)."""
     try:
         req = urllib.request.Request(
             url,
@@ -33,14 +33,10 @@ def check_stream_url(url):
         with urllib.request.urlopen(req, timeout=CHECK_TIMEOUT) as resp:
             if resp.status != 200:
                 return False
-            return len(resp.read(512)) > 0
+            chunk = resp.read(512)
+            return b'#EXTM3U' in chunk or b'#EXT-X-' in chunk
     except Exception:
         return False
-
-
-def get_current_url(channel_name):
-    """Return the current stream URL for a channel from the m3u file."""
-    return M3UUpdater.read_stream_urls(M3U_FILE).get(channel_name)
 
 
 def fetch_and_test(channel):
@@ -81,13 +77,15 @@ def main():
         print(f"Error: M3U file not found: {M3U_FILE}")
         return False
 
+    current_urls = M3UUpdater.read_stream_urls(M3U_FILE)
     channel_updates = {}
+    dead_channels = []
 
     for channel in CHANNELS:
         name = channel["name"]
         print(f"\n{name}  [{channel['extractor']}]")
 
-        current_url = get_current_url(name)
+        current_url = current_urls.get(name)
         if not current_url:
             print("  ✗ No URL found in m3u for this channel — skipping")
             continue
@@ -100,6 +98,7 @@ def main():
             print("✓ OK — no update needed")
             continue
 
+        dead_channels.append(name)
         print("✗ dead — fetching replacement")
         new_url = fetch_and_test(channel)
 
@@ -111,15 +110,26 @@ def main():
 
     print("\n" + "-" * 60)
 
-    if not channel_updates:
+    if not dead_channels:
         print("\nAll links OK. No updates needed.")
         return True
+
+    if not channel_updates:
+        print(f"\n✗ {len(dead_channels)} dead link(s), all refresh attempts failed — review manually:")
+        for name in dead_channels:
+            print(f"  • {name}")
+        return False
 
     print(f"\nUpdating {len(channel_updates)} channel(s) in {M3U_FILE}...")
     if M3UUpdater.update_m3u_file(M3U_FILE, channel_updates):
         print(f"✓ M3U file updated:")
         for name in channel_updates:
             print(f"  • {name}")
+        if len(channel_updates) < len(dead_channels):
+            still_dead = [n for n in dead_channels if n not in channel_updates]
+            print(f"\n⚠ Could not refresh {len(still_dead)} channel(s) — review manually:")
+            for name in still_dead:
+                print(f"  • {name}")
         return True
     else:
         print("✗ Failed to write M3U file")
