@@ -1,3 +1,8 @@
 tv-playlist.service
 .claude
-settings.local.json
+.settings.local.json
+logs/
+backup_to_smb.sh
+watch_and_backup.sh
+
+
