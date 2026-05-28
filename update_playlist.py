@@ -72,7 +72,7 @@ CHANNELS = [
     },
 ]
 
-M3U_FILE = "streams/bo.m3u"  # Path to your M3U file
+M3U_FILE = str(Path(__file__).parent / "streams" / "bo.m3u")
 TIMEOUT = 30  # Seconds to wait for yt-dlp
 
 
