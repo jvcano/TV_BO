@@ -80,6 +80,8 @@ def main():
     current_urls = M3UUpdater.read_stream_urls(M3U_FILE)
     channel_updates = {}
     dead_channels = []
+    ok_channels = []
+    skipped_channels = []
 
     for channel in CHANNELS:
         name = channel["name"]
@@ -88,6 +90,7 @@ def main():
         current_url = current_urls.get(name)
         if not current_url:
             print("  ✗ No URL found in m3u for this channel — skipping")
+            skipped_channels.append(name)
             continue
 
         display = current_url if len(current_url) <= 70 else current_url[:70] + "..."
@@ -96,6 +99,7 @@ def main():
 
         if check_stream_url(current_url):
             print("✓ OK — no update needed")
+            ok_channels.append(name)
             continue
 
         dead_channels.append(name)
@@ -110,30 +114,39 @@ def main():
 
     print("\n" + "-" * 60)
 
-    if not dead_channels:
-        print("\nAll links OK. No updates needed.")
-        return True
-
-    if not channel_updates:
-        print(f"\n✗ {len(dead_channels)} dead link(s), all refresh attempts failed — review manually:")
-        for name in dead_channels:
-            print(f"  • {name}")
-        return False
-
-    print(f"\nUpdating {len(channel_updates)} channel(s) in {M3U_FILE}...")
-    if M3UUpdater.update_m3u_file(M3U_FILE, channel_updates):
-        print(f"✓ M3U file updated:")
-        for name in channel_updates:
-            print(f"  • {name}")
-        if len(channel_updates) < len(dead_channels):
-            still_dead = [n for n in dead_channels if n not in channel_updates]
-            print(f"\n⚠ Could not refresh {len(still_dead)} channel(s) — review manually:")
-            for name in still_dead:
+    write_ok = True
+    if channel_updates:
+        print(f"\nUpdating {len(channel_updates)} channel(s) in {M3U_FILE}...")
+        if M3UUpdater.update_m3u_file(M3U_FILE, channel_updates):
+            print(f"✓ M3U file updated:")
+            for name in channel_updates:
                 print(f"  • {name}")
-        return True
-    else:
-        print("✗ Failed to write M3U file")
-        return False
+        else:
+            print("✗ Failed to write M3U file")
+            write_ok = False
+    elif not dead_channels:
+        print("\nAll links OK. No updates needed.")
+
+    failed_channels = [n for n in dead_channels if n not in channel_updates]
+    if failed_channels:
+        print(f"\n⚠ {len(failed_channels)} channel(s) still dead — review manually:")
+        for name in failed_channels:
+            print(f"  • {name}")
+
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    refreshed_list = ", ".join(channel_updates.keys()) or "-"
+    failed_list = ", ".join(failed_channels) or "-"
+    print(
+        f"\n[{ts}] RESULT: "
+        f"ok={len(ok_channels)} "
+        f"dead={len(dead_channels)} "
+        f"refreshed={len(channel_updates)} "
+        f"failed={len(failed_channels)} "
+        f"skipped={len(skipped_channels)} "
+        f"| refreshed: {refreshed_list} | failed: {failed_list}"
+    )
+
+    return write_ok and not failed_channels
 
 
 if __name__ == "__main__":
