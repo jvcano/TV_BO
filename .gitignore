@@ -4,5 +4,6 @@ tv-playlist.service
 logs/
 backup_to_smb.sh
 watch_and_backup.sh
+__pycache__/
 
 
