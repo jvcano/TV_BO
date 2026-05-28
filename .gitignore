@@ -4,5 +4,5 @@ tv-playlist.service
 logs/
 watch_and_backup.sh
 __pycache__/
-
+__pycache__
 
