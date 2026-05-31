@@ -39,10 +39,12 @@ def check_stream_url(url):
         return False
 
 
-def fetch_and_test(channel):
+def fetch_and_test(channel, current_url=None):
     """
     Try to extract a new working URL for the channel.
     Retries up to MAX_RETRIES times. Returns the URL on success, None otherwise.
+    If the extractor returns the same URL we already know is dead, abort early
+    (re-testing the same URL is pointless — e.g. Unitel's permanent URL).
     """
     for attempt in range(1, MAX_RETRIES + 1):
         print(f"    [{attempt}/{MAX_RETRIES}] Extracting new URL...", end=" ", flush=True)
@@ -53,6 +55,11 @@ def fetch_and_test(channel):
         else:
             print(f"got URL")
             print(f"           {new_url}")
+
+            if new_url == current_url:
+                print(f"           ↳ Same as current dead URL — extractor has no alternative, aborting retries")
+                return None
+
             print(f"           Testing...", end=" ", flush=True)
             if check_stream_url(new_url):
                 print("✓ works")
@@ -104,7 +111,7 @@ def main():
 
         dead_channels.append(name)
         print("✗ dead — fetching replacement")
-        new_url = fetch_and_test(channel)
+        new_url = fetch_and_test(channel, current_url=current_url)
 
         if new_url:
             channel_updates[name] = new_url
