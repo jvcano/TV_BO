@@ -148,7 +148,13 @@ class BoliviaTVExtractor:
     returns a playable manifest. Falls back to None if none work.
     """
 
-    _PATTERN = r'dailymotion\.com/(?:video|embed/video)/([a-zA-Z0-9]+)'
+    # Both forms used by Bolivia TV:
+    #   - direct: https://www.dailymotion.com/video/x9nzqpo
+    #   - geo embed: https://geo.dailymotion.com/player/x12yfi.html?video=x9nzqpo
+    _PATTERNS = [
+        r'dailymotion\.com/(?:video|embed/video)/([a-zA-Z0-9]+)',
+        r'geo\.dailymotion\.com/[^"\']*[?&]video=([a-zA-Z0-9]+)',
+    ]
 
     @staticmethod
     def extract_stream_url(channel):
@@ -164,14 +170,15 @@ class BoliviaTVExtractor:
             print(f"  ✗ Failed to fetch page: {e}")
             return None
 
-        # Preserve order, deduplicate
+        # Preserve order across patterns, deduplicate
         seen = set()
         video_ids = []
-        for match in re.finditer(BoliviaTVExtractor._PATTERN, html):
-            vid = match.group(1)
-            if vid not in seen:
-                seen.add(vid)
-                video_ids.append(vid)
+        for pattern in BoliviaTVExtractor._PATTERNS:
+            for match in re.finditer(pattern, html):
+                vid = match.group(1)
+                if vid not in seen:
+                    seen.add(vid)
+                    video_ids.append(vid)
 
         if not video_ids:
             print("  ✗ No Dailymotion video ID found in page (page may be JS-rendered)")
