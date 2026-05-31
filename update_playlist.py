@@ -143,17 +143,12 @@ class BoliviaTVExtractor:
     """Discover the current Dailymotion video ID from the Bolivia TV live page.
 
     Bolivia TV periodically rotates the Dailymotion video used for their live stream.
-    This fetches the page HTML, finds whichever video ID is currently embedded,
-    then hands it to DailymotionExtractor to get the CDN .m3u8.
+    This fetches the page HTML, collects every distinct dailymotion.com video ID
+    embedded in the page (in order), and tries each one with yt-dlp until one
+    returns a playable manifest. Falls back to None if none work.
     """
 
-    # Patterns ordered from most specific to least specific
-    _PATTERNS = [
-        r'dailymotion\.com/(?:video|embed/video)/([a-zA-Z0-9]+)',
-        r'geo\.dailymotion\.com/[^"\']*[?&]video=([a-zA-Z0-9]+)',
-        r'"video"\s*:\s*"([a-zA-Z0-9]{5,})"',
-        r'videoId[^"\']{0,5}["\']([a-zA-Z0-9]{5,})["\']',
-    ]
+    _PATTERN = r'dailymotion\.com/(?:video|embed/video)/([a-zA-Z0-9]+)'
 
     @staticmethod
     def extract_stream_url(channel):
@@ -169,15 +164,28 @@ class BoliviaTVExtractor:
             print(f"  ✗ Failed to fetch page: {e}")
             return None
 
-        for pattern in BoliviaTVExtractor._PATTERNS:
-            match = re.search(pattern, html)
-            if match:
-                video_id = match.group(1)
-                dm_url = f"https://www.dailymotion.com/video/{video_id}"
-                print(f"  Found video ID: {video_id}")
-                return DailymotionExtractor.extract_m3u8_url(dm_url)
+        # Preserve order, deduplicate
+        seen = set()
+        video_ids = []
+        for match in re.finditer(BoliviaTVExtractor._PATTERN, html):
+            vid = match.group(1)
+            if vid not in seen:
+                seen.add(vid)
+                video_ids.append(vid)
 
-        print("  ✗ No Dailymotion video ID found in page (page may be JS-rendered)")
+        if not video_ids:
+            print("  ✗ No Dailymotion video ID found in page (page may be JS-rendered)")
+            return None
+
+        print(f"  Found {len(video_ids)} candidate video ID(s): {', '.join(video_ids)}")
+        for vid in video_ids:
+            print(f"  Trying video ID: {vid}")
+            dm_url = f"https://www.dailymotion.com/video/{vid}"
+            stream = DailymotionExtractor.extract_m3u8_url(dm_url)
+            if stream:
+                return stream
+
+        print("  ✗ None of the candidate video IDs were playable")
         return None
 
 
